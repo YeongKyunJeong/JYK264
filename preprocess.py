@@ -7,9 +7,14 @@ from pathlib import Path
 from matplotlib import pyplot as plt
 import matplotlib.colors as colors
 
+import ysfitsutilpy as yfu
+import shutil as sh
+
 import astropy.units as u
 from astropy.nddata import CCDData
 from ccdproc import Combiner
+from ccdproc import subtract_bias, subtract_dark, flat_correct
+from ccdproc import trim_image
 
 #%%
 # 아래에 fits파일이 있는 directory 위치를 적을 것.
@@ -40,10 +45,33 @@ print(len(allfitsname),type(allfitsname[0]),"\n",len(allfitspath),type(allfitspa
 Header 읽기, Table 작성
 """
 #%%
+BUpath = fitspath/'BU'
+BUpath.exists()
+#%%
+print("이미지를 자르시겠습니까?")
+cutting_decision = input("Y/N, 그 외의 모든 입력은 N으로 처리")
+
+if cutting_decision == "Y":
+    x1= int(input("x시작"))
+    x2= int(input("x끝"))
+    y1= int(input("y시작"))
+    y2= int(input("y끝"))
+    print(f"[{x1}:{x2}, {y1}:{y2}]")
+    
+if not ( (x1 < x2) & (y1 < y2)):
+
+    print("범위 입력이 잘못되었습니다. Image trim을 하지 않습니다.")
+    cutting_decision = "N"
+    
+
+
+
+#%%
+
+
 """header test"""
 hdr = fits.getheader(allfitsname[0])
 """hdr을 입력해서 header를 읽어보시오"""
-
 
 
 
@@ -67,11 +95,20 @@ fnames=[]
 for filename in allfitsname:
     os.chmod(filename,777)
     fnames.append(filename)
+
+    
     hdr = fits.getheader(filename)
     row = []
     for card in cards:
         row.append(hdr[card])
-    table.add_row(row)    
+    table.add_row(row)
+    
+    if cutting_decision == 'Y':
+        ccd = trim_image(CCDData.read(filename,unit=u.adu),fits_section=f"[{x1}:{x2}, {y1}:{y2}]")
+        #16bit를 32비트로 만듦
+        ccd = yfu.CCDData_astype(ccd,dtype = 'float32')
+        ccd.write(filename,overwrite=True)    
+
 
 # table에 이름 column 추가
 fnames = Column(data=fnames, name='FILE')
@@ -85,6 +122,13 @@ else:
     print("Table 저장 폴더가 이미 있어서 새로 만들지 않음")
     
 table.write(tablepath/'Headersumm.csv',format='ascii.csv',overwrite=True)
+
+
+
+
+
+#%%
+
 
 
 
@@ -161,31 +205,40 @@ else:
 
 #%%
 mdark_fdic={}
-for i in range(len(exptlist)):
-    if os.path.exists(dark_fdic[exptlist[i]]):
-        mdark_fdic[exptlist[i]] = fits.getdata(dark_fdic[exptlist[i]])
-        print("")
+for k in range(len(exptlist)):
+    if os.path.exists(prepath/dark_fdic[exptlist[k]]):
+        mdark_fdic[exptlist[k]] = fits.getdata(prepath/dark_fdic[exptlist[k]])
+        print(f"이전에 만든 {exptlist[k]}초 Dark 사용")
 
-    else:
-        for j in exptlist:   
+    else:   
+        images=[]
+        for i in range(len(darkdic[exptlist[k]])):
+            cc = CCDData(fits.getdata(darkdic[exptlist[k]][i]['FILE']),unit= u.adu)
+            images.append(cc)
+            print(darkdic[exptlist[k]][i]['FILE'])
 
-            images=[]
-            for i in range(len(darkdic[j])):
-                cc = CCDData(fits.getdata(darkdic[j][i]['FILE']),unit= u.adu)
-                images.append(cc)
-                cc = Combiner(images)
-                mdark_fdic[j] = cc.median_combine()
-            cc = fits.getheader(darkdic[j][0]['FILE'])
+        print(len(images))
+        cc = Combiner(images)
+        mdark_fdic[exptlist[k]] = cc.median_combine()
+        cc = fits.getheader(darkdic[j][0]['FILE'])
+        print(f"{exptlist[k]}초 Master Dark",sep='\n')
         
-            mdark_fdic[j].header = cc
-            mdark_fdic[j].header.add_history(f"{len(darkdic[j])} image(s) median combined dark frames")
-            mdark_fdic[j].write(prepath/dark_fdic[j],overwrite=True)    
+        mdark_fdic[exptlist[k]] = subtract_bias(mdark_fdic[exptlist[k]],mbias)
+        #flat 빼기
+        mdark_fdic[exptlist[k]].header = cc
+        mdark_fdic[exptlist[k]].header.add_history(f"{len(darkdic[j])} image(s) median combined dark frames with flat sub")
+        mdark_fdic[exptlist[k]].write(prepath/dark_fdic[exptlist[k]],overwrite=True) 
 
+
+   
+            """
+#%%
+print(dark_fdic[7])
 
 #%%
 
-if os.path.exists(flat_fname):
-    mflat = fits.getdata(flat_fname) 
+if os.path.exists(prepath/flat_fname):
+    mflat = fits.getdata(prepath/flat_fname) 
 
 else:
 
