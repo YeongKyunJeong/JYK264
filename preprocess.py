@@ -140,9 +140,9 @@ else:
 
 
 
-if os.path.exists(bias_fname):
-    mbias = fits.getdata(bias_fname)
-
+if os.path.exists(prepath/bias_fname):
+    mbias = fits.getdata(prepath/bias_fname)
+    print("이전에 만든 bias 사용")
 else:   
     images=[]
     for i in range(len(biastab)):
@@ -159,26 +159,27 @@ else:
 
 
 
-
+#%%
 mdark_fdic={}
 for i in range(len(exptlist)):
     if os.path.exists(dark_fdic[exptlist[i]]):
         mdark_fdic[exptlist[i]] = fits.getdata(dark_fdic[exptlist[i]])
+        print("")
 
-else:
-    for j in exptlist:   
+    else:
+        for j in exptlist:   
 
-        images=[]
-        for i in range(len(darkdic[j])):
-            cc = CCDData(fits.getdata(darkdic[j][i]['FILE']),unit= u.adu)
-            images.append(cc)
-        cc = Combiner(images)
-        mdark_fdic[j] = cc.median_combine()
-        cc = fits.getheader(darkdic[j][0]['FILE'])
+            images=[]
+            for i in range(len(darkdic[j])):
+                cc = CCDData(fits.getdata(darkdic[j][i]['FILE']),unit= u.adu)
+                images.append(cc)
+                cc = Combiner(images)
+                mdark_fdic[j] = cc.median_combine()
+            cc = fits.getheader(darkdic[j][0]['FILE'])
         
-        mdark_fdic[j].header = cc
-        mdark_fdic[j].header.add_history(f"{len(darkdic[j])} image(s) median combined dark frames")
-        mdark_fdic[j].write(prepath/dark_fdic[j],overwrite=True)    
+            mdark_fdic[j].header = cc
+            mdark_fdic[j].header.add_history(f"{len(darkdic[j])} image(s) median combined dark frames")
+            mdark_fdic[j].write(prepath/dark_fdic[j],overwrite=True)    
 
 
 #%%
