@@ -220,31 +220,42 @@ for k in range(len(exptlist)):
         print(len(images))
         cc = Combiner(images)
         mdark_fdic[exptlist[k]] = cc.median_combine()
-        cc = fits.getheader(darkdic[j][0]['FILE'])
+        cc = fits.getheader(darkdic[exptlist[k]][0]['FILE'])
         print(f"{exptlist[k]}초 Master Dark",sep='\n')
         
         mdark_fdic[exptlist[k]] = subtract_bias(mdark_fdic[exptlist[k]],mbias)
         #flat 빼기
         mdark_fdic[exptlist[k]].header = cc
-        mdark_fdic[exptlist[k]].header.add_history(f"{len(darkdic[j])} image(s) median combined dark frames with flat sub")
+        mdark_fdic[exptlist[k]].header.add_history(f"{len(darkdic[exptlist[k]])} image(s) median combined dark frames with bias sub")
         mdark_fdic[exptlist[k]].write(prepath/dark_fdic[exptlist[k]],overwrite=True) 
 
 
    
-            """
 #%%
-print(dark_fdic[7])
-
+for i in exptlist:
+    print(np.mean(mdark_fdic[i]))
+     
 #%%
 
 if os.path.exists(prepath/flat_fname):
-    mflat = fits.getdata(prepath/flat_fname) 
-
+    mflat = fits.getdata(prepath/flat_fname)
+    print("이전에 만든 bias 사용")
+# flat에 해당하는 expt가 없을 경우는 나중에 추가
 else:
 
     images=[]
     for i in range(len(flattab)):
         cc = CCDData(fits.getdata(flattab[i]['FILE']), unit = u.adu)
+#        print(np.mean(cc))
+        cc = subtract_bias(cc,mbias)
+#        print(np.mean(cc))
+        cc = subtract_dark(cc,mdark_fdic[int(flattab[i]['EXPTIME'])]
+                            ,flattab[i]['EXPTIME']*u.second,flattab[i]['EXPTIME']*u.second)
+#        print(np.mean(cc))
+
+        cc = CCDData(cc/np.mean(cc),unit = u.adu)
+#        print(np.mean(cc),'\n')
+
         images.append(cc)
 
     cc = Combiner(images)
@@ -252,22 +263,33 @@ else:
     cc = fits.getheader(flattab[0]['FILE'])
 
     mflat.header = cc
-    mflat.header.add_history(f"{len(flattab)} image(s) median combined flat frames")
+    mflat.header.add_history(f"{len(flattab)} image(s) median combined flat frames with b&d sub")
     mflat.write(prepath/flat_fname,overwrite=True)
 
-"""
-else:
-    mflat = preproc.make_master_flat(flattab, mbias=mbias, sigma=3, iters=5,
-                                     min_value=5000, 
-                                     output = flat_fname)
-"""
-#%%
-mflat.header
+
+
 #%%
 
 """Object Image Table 나누기"""
+ob_dic={}
+ob_list=[]
+for i in table['OBJECT']:
+    if ((not i in ob_list ) & 
+        (i !=  'Calibration') & 
+        (i != 'Flat') & 
+        (i != 'Bias') ):
+        ob_list.append(i)
+ob_list.sort()
 
+#print(exptlist)
 
+for i in range(len(ob_list)):
+    ob = table[((table['OBJECT']==ob_list[i]))]
+    ob_dic[ob_list[i]]=ob
+
+#%%
+
+print(ob_list, ob_dic,sep='\n')
 #%%
 test1 = CCDData(np.ones((4,4)),unit=u.adu)
 test2 = CCDData(np.zeros((4,4)),unit=u.adu)
