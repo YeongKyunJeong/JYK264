@@ -232,7 +232,6 @@ else:
     cc = Combiner(images)
 
     mbias = cc.median_combine()
-    print(np.dtype(mbias[100][100]))
     cc = fits.getheader(biastab[0]['FILE'])
     
     mbias.header = cc
