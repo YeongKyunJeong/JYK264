@@ -8,7 +8,6 @@ from matplotlib import pyplot as plt
 import matplotlib.colors as colors
 
 import ysfitsutilpy as yfu
-import shutil as sh
 
 import astropy.units as u
 from astropy.nddata import CCDData
@@ -24,53 +23,62 @@ from ccdproc import trim_image
 #fitspath = Path('C:/Users/jjbyk/AO2/project/2019-10-24')
 
 #학과전산실용
-namepath = '/home/astro_02/AO2019-2/2019-10-24'
-fitspath = Path('/home/astro_02/AO2019-2/2019-10-24')
+fitspath = Path('/home/astro_02/AO2019-2/2019-10-24/BU')
+newfitspath = Path('/home/astro_02/AO2019-2/2019-10-24')
 
-
-os.chdir(namepath)
+os.chdir(fitspath)
 #os.chdir("..") directory 변경
 #allfits = fitspath.glob('*.fit')
 # recursive=True로 설정하고 '**'를 사용하면 모든 하위 디렉토리까지 탐색한다.
 
 """Image 이름, 경로"""
-
-allfitsname = glob.glob('*.fit')
+allfitsname = glob.glob('*.fits')
 allfitspath = list(fitspath.glob('*.fit'))
 
-print(len(allfitsname),type(allfitsname[0]),"\n",len(allfitspath),type(allfitspath[0]))
+
+print(len(allfitspath),"Items are searched")
 
 #%%
 """
 Header 읽기, Table 작성
 """
+
 #%%
-BUpath = fitspath/'BU'
-BUpath.exists()
-#%%
-print("이미지를 자르시겠습니까?")
-cutting_decision = input("Y/N, 그 외의 모든 입력은 N으로 처리")
+df = input("Default? Y/N(Otherwise) [880:1100,1,2048]")
+if df != "Y":
 
-if cutting_decision == "Y":
-    x1= int(input("x시작"))
-    x2= int(input("x끝"))
-    y1= int(input("y시작"))
-    y2= int(input("y끝"))
-    print(f"[{x1}:{x2}, {y1}:{y2}]")
+    print("이미지를 자르시겠습니까?")
+    cutting_decision = input("Y/N, 그 외의 모든 입력은 N으로 처리")
+
+    if cutting_decision == "Y":
+        x1= int(input("x시작"))
+        x2= int(input("x끝"))
+        y1= int(input("y시작"))
+        y2= int(input("y끝"))
+        print(f"[{x1}:{x2}, {y1}:{y2}]")
     
-if not ( (x1 < x2) & (y1 < y2)):
-
-    print("범위 입력이 잘못되었습니다. Image trim을 하지 않습니다.")
-    cutting_decision = "N"
-    
-
-
+    if not ( (x1 < x2) & (y1 < y2)):
+        
+        print("범위 입력이 잘못되었습니다. Image trim을 하지 않습니다.")
+        cutting_decision = "N"
+    else:
+        x1 = 1
+        x2 = 2048
+        y1 = 1
+        y2 = 2048
+        
+else:
+    x1 = 880
+    x2 = 1100
+    y1 = 1
+    y2 = 2048
+    print(f"[{x1}:{x2},{y1}:{y2}]")
 
 #%%
 
 
 """header test"""
-hdr = fits.getheader(allfitsname[0])
+hdr = fits.getheader(allfitspath[0])
 """hdr을 입력해서 header를 읽어보시오"""
 
 
@@ -86,14 +94,33 @@ dtypes = ['U24', int, int,
           float, float,
           'U16']
 
+"""Image trimming and coppying"""
 
 
+for filename in allfitsname:
+    ccd = trim_image(CCDData.read(filename,unit=u.adu),fits_section=f"[{x1}:{x2}, {y1}:{y2}]")
+    #16bit를 32비트로 만듦
+    ccd = yfu.CCDData_astype(ccd,dtype = 'float32')
+    filename += 's'
+    ccd.write(newfitspath/filename,overwrite=True)    
+    #fits로 만들어 저장
+    
+    
+#%%
+os.chdir(newfitspath)
+allfitsname = glob.glob('*.fits')
+allfitspath = list(newfitspath.glob('*.fits'))
+allfitspath.sort()
+#Trim된 새 Data들로 Path를 바꿈
+#%%
 
 table=Table(names=cards, dtype=dtypes)
 fnames=[]
+obnames=[]
+fdic = dict(bias=[], dark={}, flat=[], comp=[], objt=[])
+
 
 for filename in allfitsname:
-    os.chmod(filename,777)
     fnames.append(filename)
 
     
@@ -103,19 +130,32 @@ for filename in allfitsname:
         row.append(hdr[card])
     table.add_row(row)
     
-    if cutting_decision == 'Y':
-        ccd = trim_image(CCDData.read(filename,unit=u.adu),fits_section=f"[{x1}:{x2}, {y1}:{y2}]")
-        #16bit를 32비트로 만듦
-        ccd = yfu.CCDData_astype(ccd,dtype = 'float32')
-        ccd.write(filename,overwrite=True)    
+    if hdr['OBJECT'].lower().startswith('calibration'):
+        try:
+            fdic['dark'][float(hdr['EXPTIME'])]
+        except KeyError:
+            fdic['dark'][float(hdr['EXPTIME'])] = []
+        fdic['dark'][float(hdr['EXPTIME'])].append(filename)        
+        
+        
+    elif hdr['OBJECT'].lower().startswith('bias'):
+        fdic['bias'].append(filename)
+    
+    elif hdr['OBJECT'].lower().startswith('flat'):
+        fdic['flat'].append(filename)
+    elif hdr['OBJECT'].lower().startswith('comp'):
+        fdic['comp'].append(filename)
+    else:
+        fdic['objt'].append(filename)
+        obnames.append(hdr["OBJECT"])
 
 
-# table에 이름 column 추가
+# table에 이름 column 추가  
 fnames = Column(data=fnames, name='FILE')
 table.add_column(fnames, index = 0)
 table.sort('FILE')
 # table 폴더를 따로 만들어 저장함
-tablepath=Path(fitspath/'Headertable')
+tablepath=Path(newfitspath/'Headertable')
 if not tablepath.exists():
     tablepath.mkdir()
 else:
@@ -124,13 +164,7 @@ else:
 table.write(tablepath/'Headersumm.csv',format='ascii.csv',overwrite=True)
 
 
-
-
-
 #%%
-
-
-
 
 
 
@@ -152,8 +186,7 @@ for i in range(len(exptlist)):
 
 
 flattab = table[(table['OBJECT'] == 'Flat')]
-
-""" 30초가 맞는지 10초가 맞는지 상의할 것"""
+#%%
 
 
 
@@ -176,7 +209,8 @@ flat_fname = 'flat.fits'
 
 
 #%%
-prepath=Path(fitspath/'Preprocessed')
+prepath=Path(newfitspath/'Preprocessed')
+
 if not prepath.exists():
     prepath.mkdir()
 else:
@@ -191,18 +225,20 @@ else:
     images=[]
     for i in range(len(biastab)):
         cc = CCDData(fits.getdata(biastab[i]['FILE']), unit = u.adu)
+        
+        cc = yfu.CCDData_astype(cc,dtype = 'float32')
         images.append(cc)
         
     cc = Combiner(images)
+
     mbias = cc.median_combine()
+    print(np.dtype(mbias[100][100]))
     cc = fits.getheader(biastab[0]['FILE'])
     
     mbias.header = cc
     mbias.header.add_history(f"{len(biastab)} image(s) median combined bias frames")
+    mbias = yfu.CCDData_astype(mbias,dtype = 'float32')
     mbias.write(prepath/bias_fname,overwrite=True)
-
-
-
 #%%
 mdark_fdic={}
 for k in range(len(exptlist)):
@@ -224,16 +260,13 @@ for k in range(len(exptlist)):
         print(f"{exptlist[k]}초 Master Dark",sep='\n')
         
         mdark_fdic[exptlist[k]] = subtract_bias(mdark_fdic[exptlist[k]],mbias)
-        #flat 빼기
+        #bias 빼기
         mdark_fdic[exptlist[k]].header = cc
         mdark_fdic[exptlist[k]].header.add_history(f"{len(darkdic[exptlist[k]])} image(s) median combined dark frames with bias sub")
+        mdark_fdic[exptlist[k]] = yfu.CCDData_astype(mdark_fdic[exptlist[k]],dtype = 'float32')
         mdark_fdic[exptlist[k]].write(prepath/dark_fdic[exptlist[k]],overwrite=True) 
 
 
-   
-#%%
-for i in exptlist:
-    print(np.mean(mdark_fdic[i]))
      
 #%%
 
@@ -248,13 +281,12 @@ else:
         cc = CCDData(fits.getdata(flattab[i]['FILE']), unit = u.adu)
 #        print(np.mean(cc))
         cc = subtract_bias(cc,mbias)
-#        print(np.mean(cc))
+        #bias 빼기
         cc = subtract_dark(cc,mdark_fdic[int(flattab[i]['EXPTIME'])]
                             ,flattab[i]['EXPTIME']*u.second,flattab[i]['EXPTIME']*u.second)
-#        print(np.mean(cc))
-
+        #dark 빼기
         cc = CCDData(cc/np.mean(cc),unit = u.adu)
-#        print(np.mean(cc),'\n')
+        #Normalization
 
         images.append(cc)
 
@@ -264,9 +296,8 @@ else:
 
     mflat.header = cc
     mflat.header.add_history(f"{len(flattab)} image(s) median combined flat frames with b&d sub")
+    mflat = yfu.CCDData_astype(mflat,dtype = 'float32')
     mflat.write(prepath/flat_fname,overwrite=True)
-
-
 
 #%%
 
@@ -288,6 +319,40 @@ for i in range(len(ob_list)):
     ob_dic[ob_list[i]]=ob
 
 #%%
+i
+for i in ob_dic:
+    print(i)
+    for j in range(len(ob_dic[i])):
+        c = CCDData(fits.getdata(ob_dic[i][j]['FILE']), unit = u.adu)
+        hdr = fits.getheader(ob_dic[i][j]['FILE'])
+        mdark = mdark_fdic[hdr['EXPTIME']]
+        
+        
+        c = subtract_bias(c,mbias)
+        c = subtract_dark(c,mdark
+                            ,hdr['EXPTIME']*u.second,hdr['EXPTIME']*u.second)
+        c = flat_correct(c,mflat,min_value=0.01)
+        
+        c.header = hdr
+        c.header.add_history("B & D subtracted and F corrected")
+        c = yfu.CCDData_astype(c,dtype = 'float32')
+        c.write(prepath/ob_dic[i][j]['FILE'],overwrite=True) 
+
+#%%
+"""
+#%%
+c = CCDData(fits.getdata(ob_dic['Comp'][0]['FILE']), unit = u.adu)
+hdr = fits.getheader(ob_dic['Comp'][0]['FILE'])
+#%%
+prepath/mdark_fdic[ str( hdr['EXPTIME'])]
+#%%
+#print(mdark_fdic[10])
+
+print(np.mean(mbias),np.mean(mdark))
+
+#%%
+hdr
+
 
 print(ob_list, ob_dic,sep='\n')
 #%%
@@ -337,7 +402,7 @@ for i in range(500,510):
     print(ccdavg[i][i],ccdmed[i][i])
 #실행용이므로 남겨둘 것
 
-
+"""
 
 
 
