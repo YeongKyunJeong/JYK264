@@ -193,7 +193,7 @@ if not prepath.exists():
 else:
     print("Prepath 저장 폴더가 이미 있어서 새로 만들지 않음")
 
-if not os.path.exists(prepath/bias_fname):
+if os.path.exists(prepath/bias_fname):
     mbias = CCDData.read(prepath/bias_fname, unit = u.adu)
     print("이전에 만든 bias 사용")
 else:   
