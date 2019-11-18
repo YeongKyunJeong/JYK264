@@ -5,6 +5,9 @@ import numpy as np
 from pathlib import Path
 from numpy.polynomial.chebyshev import chebfit, chebval
 
+from photutils import RectangularAperture
+from photutils import aperture_photometry
+
 from matplotlib import pyplot as plt
 from matplotlib import gridspec, rcParams, rc
 from matplotlib.widgets import Cursor
@@ -165,6 +168,7 @@ elif DISPAXIS != 1:
 
 EXPTIME = objhdu[0].header['EXPTIME']
 OBJNAME = objhdu[0].header['OBJECT']
+GAIN = objhdu[0].header['EGAIN']
 # Now python axis 0 (Y-direction) is the spatial axis 
 # and 1 (X-direciton) is the wavelength (dispersion) axis.
 N_SPATIAL, N_WAVELEN = np.shape(lampimage)
@@ -179,7 +183,6 @@ MINSEP_PK = 5   # minimum separation of peaks
 MINAMP_PK = 0.01 # fraction of minimum amplitude (wrt maximum) to regard as peak
 NMAX_PK = 50
 print("setting done!")
-
 #%%
 # =============================================================================
 # Identify (1): plot for manual input
@@ -227,14 +230,16 @@ ID_init = dict(pixel_init=[1201, 1180,
                            1117, 1106,
                            1091,
                            1051, 1030, 1012,
-                           1003, 954, 931, 898, 882, 838],
+                           1003, 954, 931, 898, 882, 838,
+                           626, 599, 535],
     
                wavelength=[5852.49, 5944.83,
                            6030.00, 6143.06,
                            6217.28, 6266.49,
                            6334.43,
                            6506.53, 6598.95, 6678.28,
-                           6717.01, 6929.47, 7032.41, 7173.94, 7245.17, 7438.90])
+                           6717.01, 6929.47, 7032.41, 7173.94, 7245.17, 7438.90,
+                           8377.6070,8495.3600,8780.6220])
 
 #%%
 print(len(ID_init['pixel_init'])
@@ -538,3 +543,184 @@ ax.grid(ls=':')
 ax.set_xlabel('Pixel number')
 ax.set_ylabel('Pixel value')
 plt.show()
+#%%
+# =============================================================================
+# apall (3): aperture trace
+# =============================================================================
+# within +- 100 pixels around the aperture, the wavelength does not change much
+# as can be seen from reidentify figure 
+# (in NHAO case, ~ 0.01% ~ 0.1 Angstrom order).
+# So it's safe to assume the wavelength is constant over around such region,
+# (spatial direction) and thus I will do sky fitting from this column,
+# without considering the wavelength change along a column.
+# Then aperture extraction will map the pixel to wavelength using aperture
+# trace solution.
+
+aptrace = []
+aptrace_fwhm = []
+#coeff_apsky = []
+#aptrace_apsum = []
+#aptrace_wavelen = []
+# TODO: This is quite slow as for loop used: improvement needed.
+# I guess the problem is sigma-clipping rather than fitting process..
+for i in range(N_AP - 1):
+    lower_cut, upper_cut = i*STEP_AP, (i+1)*STEP_AP
+    
+    apall_i = np.sum(objimage[:, lower_cut:upper_cut], axis=1)
+    sky_val = np.hstack( (apall_i[ap_sky[0]:ap_sky[1]], 
+                          apall_i[ap_sky[2]:ap_sky[3]]))
+
+    # Subtract fitted sky
+    if FITTING_MODEL_APSKY.lower() == 'chebyshev':
+        # TODO: maybe we can put smoothing function as IRAF APALL's b_naverage 
+        clip_mask = sigma_clip(sky_val, sigma=SIGMA_APSKY, iters=ITERS_APSKY).mask
+        coeff, fitfull = chebfit(x_sky[~clip_mask], 
+                                 sky_val[~clip_mask],
+                                 deg=ORDER_APSKY,
+                                 full=True)
+        apall_i -= chebval(x_apall, coeff)
+#        fitRMS = np.sqrt(fitfull[0][0]/n_found)
+#        n_sky = len(x_sky)
+#        n_rej = np.count_nonzero(clip_mask)
+    
+    else:
+        raise ValueError('Function {:s} is not implemented.'.format(FITTING_MODEL_APSKY))
+
+    #TODO: put something like "lost_factor" to multiply to FWHM_ID in the bounds.
+    search_min = int(np.around(ap_init - 3*FWHM_AP))
+    search_max = int(np.around(ap_init + 3*FWHM_AP))
+    cropped = apall_i[search_min:search_max]
+    x_cropped = np.arange(len(cropped))
+    peak_pix = peak_local_max(cropped, 
+                              min_distance=FWHM_AP,
+                              indices=True,
+                              num_peaks=1)
+    if len(peak_pix) == 0:
+        aptrace.append(np.nan)
+        continue
+    peak_pix = peak_pix[0][0]
+    
+    #TODO: put something like "lost_factor" to multiply to FWHM_ID in the bounds.
+    g_init = Gaussian1D(amplitude=cropped[peak_pix], 
+                       mean=peak_pix, 
+                       stddev=FWHM_AP * gaussian_fwhm_to_sigma,
+                       bounds={'amplitude':(0, 2*cropped[peak_pix]) ,
+                               'mean':(peak_pix-3*FWHM_AP, peak_pix+3*FWHM_AP),
+                               'stddev':(0, FWHM_AP)})
+    fitted = fitter(g_init, x_cropped, cropped)
+    center_pix = fitted.mean.value + search_min
+    std_pix = fitted.stddev.value
+    aptrace_fwhm.append(fitted.fwhm)
+    aptrace.append(center_pix)
+#    coeff_apsky.append(coeff)
+#    aptrace_apsum.append(apsum)
+#    apsum_lower = int(np.around(center_pix - apsum_sigma_lower * std_pix))
+#    apsum_upper = int(np.around(center_pix + apsum_sigma_upper * std_pix))
+#    apsum = np.sum(apall_i[apsum_lower:apsum_upper])
+
+aptrace = np.array(aptrace)
+aptrace_fwhm = np.array(aptrace_fwhm)
+#coeff_apsky = np.array(coeff_apsky)
+#aptrace_apsum = np.array(aptrace_apsum)
+
+#%%
+#ORDER_APTRACE = 5
+#SIGMA_APTRACE = 3
+#ITERS_APTRACE = 10
+#%%
+# =============================================================================
+# apall(4): aperture trace fit
+# =============================================================================
+x_aptrace = np.arange(N_AP-1) * STEP_AP
+coeff_aptrace = chebfit(x_aptrace, aptrace, deg=ORDER_APTRACE)
+resid_mask = sigma_clip(aptrace - chebval(x_aptrace, coeff_aptrace), 
+                        sigma=SIGMA_APTRACE, iters=ITERS_APTRACE).mask
+
+x_aptrace_fin = x_aptrace[~resid_mask]
+aptrace_fin = aptrace[~resid_mask]
+coeff_aptrace_fin = chebfit(x_aptrace_fin, aptrace_fin, deg=ORDER_APTRACE)
+fit_aptrace_fin   = chebval(x_aptrace_fin, coeff_aptrace_fin)
+resid_aptrace_fin = aptrace_fin - fit_aptrace_fin
+del_aptrace = ~np.in1d(x_aptrace, x_aptrace_fin) # deleted points
+
+fig = plt.figure(figsize=(10,8))
+gs = gridspec.GridSpec(3, 1)
+ax1 = plt.subplot(gs[0:2], sharex=ax2)
+ax2 = plt.subplot(gs[2])
+
+title_str = ('Aperture Trace Fit ({:s} order {:d})\n'
+            + 'Residuials {:.1f}-sigma, {:d}-iters clipped')
+plt.suptitle(title_str.format(FITTING_MODEL_APTRACE, ORDER_APTRACE,
+                              SIGMA_APTRACE, ITERS_APTRACE))
+ax1.plot(x_aptrace, aptrace, ls='', marker='+', ms=10)
+ax1.plot(x_aptrace_fin, fit_aptrace_fin, ls='--',
+         label="Aperture Trace ({:d}/{:d} used)".format(len(aptrace_fin), N_AP-1))
+ax1.plot(x_aptrace[del_aptrace], aptrace[del_aptrace], ls='', marker='x', ms=10)
+ax1.legend()
+ax2.plot(x_aptrace_fin, resid_aptrace_fin, ls='', marker='+')
+#ax2.plot(x_aptrace, aptrace - chebval(x_aptrace, coeff_aptrace_fin), 
+#         ls='', marker='+')
+ax2.axhline(+np.std(resid_aptrace_fin, ddof=1), ls=':', color='k')
+ax2.axhline(-np.std(resid_aptrace_fin, ddof=1), ls=':', color='k', 
+            label='residual std')
+
+ax1.set_ylabel('Found object position')
+ax2.set_ylabel('Residual (pixel)')
+ax2.set_xlabel('Dispersion axis (pixel)')
+ax1.grid(ls=':')
+ax2.grid(ls=':')
+ax2.set_ylim(-.5, .5)
+ax2.legend()
+plt.show()
+#plt.savefig('aptrace.png', bbox_inches='tight')
+#%%
+# =============================================================================
+# apall(5): aperture sum
+# =============================================================================
+
+apsum_sigma_lower = 5 # See below
+apsum_sigma_upper = 5 
+# lower and upper limits of aperture to set from the center in gauss-sigma unit.
+ap_fwhm = np.median(aptrace_fwhm[~resid_mask])
+ap_sigma = ap_fwhm * gaussian_fwhm_to_sigma
+
+x_ap = np.arange(N_WAVELEN)
+y_ap = chebval(x_ap, coeff_aptrace_fin)
+ap_wavelen = fit2D_REID(x_ap, y_ap)
+ap_summed  = []
+ap_sky_offset = ap_sky - ap_init
+height =  (apsum_sigma_lower+apsum_sigma_upper)*ap_sigma
+
+aps=RectangularAperture([x_ap,y_ap],w = 1, h = height)
+
+ap_summed = aperture_photometry(objimage/EXPTIME,aps,method='subpixel',subpixels=1)
+
+#%%
+fig = plt.figure(figsize=(10,5))
+gs = gridspec.GridSpec(3,1)
+ax = plt.subplot(gs[0:3])
+#plt.setp(ax.get_xticklabels(), visible=False)
+
+title_str = '{:s}\nobjext = {:s}, EXPTIME = {:.1f} s'
+label_str = r'aperture width $\approx$ {:.1f} pix'
+plt.suptitle(title_str.format(os.path.split(OBJIMAGE)[-1],
+                            OBJNAME, EXPTIME))
+ax.plot(ap_wavelen,(ap_summed['aperture_sum']),lw=1,
+#ax.plot(ap_wavelen[500:1500],ap_summed[500:1500], lw=1,
+#ax.plot(xxx,ap_summed, lw=1,
+#        alpha=0.5,
+        label=label_str.format(apsum_sigma_lower*ap_sigma
+                               +apsum_sigma_upper*ap_sigma))
+ax.set_ylabel('Instrument Intensity\n(apsum/EXPTIME)')
+
+#ax.errorbar(ap_wavelen,
+#            np.array(ap_summed['aperture_sum']),
+#            yerr=np.sqrt(ap_summed['aperture_sum']/GAIN)
+#
+#            ,fmt='o')
+            
+ax.set_xlabel(r'$\lambda$ ($\AA$)')
+ax.grid(ls=':')
+ax.legend()
+plt.show()
+
