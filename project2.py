@@ -92,7 +92,6 @@ rcParams.update({'font.size': FONTSIZE})
 COMPIMAGE = os.path.join(ppdpath, 'Comp-master.fits') # Change directory if needed!
 OBJIMAGE  = os.path.join(ppdpath, 'NGC2639-0001.fits')
 LINE_FITTER = LevMarLSQFitter()
-
 #%%
 # Parameters for IDENTIFY
 FITTING_MODEL_ID = 'Chebyshev'
@@ -158,9 +157,10 @@ MINSEP_PK = 5   # minimum separation of peaks
 MINAMP_PK = 0.01 # fraction of minimum amplitude (wrt maximum) to regard as peak
 NMAX_PK = 50
 print("setting done!")
+
 #%%
-fig, axs = plt.subplots(1,1)
-im = yfu.zimshow(axs,objimage)
+#fig, axs = plt.subplots(1,1)
+#im = yfu.zimshow(axs,objimage)
 
 #%%
 # =============================================================================
@@ -204,7 +204,7 @@ plt.show()
 
 #%%
 
-ID_init = dict(pixel_init=[1201, 1180,
+ID_init = dict(pixel_init=[1303, 1201, 1180,
                            1160, 1134, 
                            1117, 1106,
                            1091,
@@ -212,7 +212,7 @@ ID_init = dict(pixel_init=[1201, 1180,
                            1003, 954, 931, 898, 882, 838,
                            626, 599, 535],
     
-               wavelength=[5852.49, 5944.83,
+               wavelength=[5400.5620,5852.49, 5944.83,
                            6030.00, 6143.06,
                            6217.28, 6266.49,
                            6334.43,
@@ -476,8 +476,14 @@ plt.show()
 # apall(2): manually select sky, see how the fit works
 # =============================================================================
 ap_init = int(peak_pix[0])
+#%%
+peak_pix[0]
+#%%
+#original sky region
+#ap_sky = np.array([ap_init-40, ap_init-20, ap_init+20, ap_init+40])
+#for NGC 2639
+ap_sky = np.array([ap_init-60, ap_init-40, ap_init+20, ap_init+30])
 
-ap_sky = np.array([ap_init-40, ap_init-20, ap_init+20, ap_init+40])
 # Regions to use as sky background. xl1 - 1, xu1, xl2 - 1, xu2. (0-indexing)
 #   Sky region should also move with aperture center!
 #   from ``ap_center - 50`` to ``ap_center - 40``, for example, should be used.
