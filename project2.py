@@ -90,7 +90,7 @@ DISPAXIS = 2 # 1 = line = python_axis_1 // 2 = column = python_axis_0
 FONTSIZE = 12 # Change it on your computer if you wish.
 rcParams.update({'font.size': FONTSIZE})
 COMPIMAGE = os.path.join(ppdpath, 'Comp-master.fits') # Change directory if needed!
-OBJIMAGE  = os.path.join(ppdpath, 'NGC2639-0001.fits')
+OBJIMAGE  = os.path.join(ppdpath, 'HD4628-0001.fits')
 LINE_FITTER = LevMarLSQFitter()
 #%%
 # Parameters for IDENTIFY
@@ -476,13 +476,11 @@ plt.show()
 # apall(2): manually select sky, see how the fit works
 # =============================================================================
 ap_init = int(peak_pix[0])
-#%%
-peak_pix[0]
-#%%
+
 #original sky region
-#ap_sky = np.array([ap_init-40, ap_init-20, ap_init+20, ap_init+40])
+ap_sky = np.array([ap_init-40, ap_init-20, ap_init+20, ap_init+40])
 #for NGC 2639
-ap_sky = np.array([ap_init-60, ap_init-40, ap_init+20, ap_init+30])
+#ap_sky = np.array([ap_init-60, ap_init-40, ap_init+20, ap_init+40])
 
 # Regions to use as sky background. xl1 - 1, xu1, xl2 - 1, xu2. (0-indexing)
 #   Sky region should also move with aperture center!
@@ -618,6 +616,8 @@ ITERS_APTRACE = 10
 # =============================================================================
 x_aptrace = np.arange(N_AP-1) * STEP_AP
 coeff_aptrace = chebfit(x_aptrace, aptrace, deg=ORDER_APTRACE)
+
+#%%
 resid_mask = sigma_clip(aptrace - chebval(x_aptrace, coeff_aptrace), 
                         sigma=SIGMA_APTRACE, iters=ITERS_APTRACE).mask
 
@@ -674,12 +674,16 @@ y_ap = chebval(x_ap, coeff_aptrace_fin)
 ap_wavelen = fit2D_REID(x_ap, y_ap)
 ap_summed  = []
 ap_sky_offset = ap_sky - ap_init
+#origina
 height =  (apsum_sigma_lower+apsum_sigma_upper)*ap_sigma
-
+#for ngc 2639
+#height = 30
 aps=RectangularAperture([x_ap,y_ap],w = 1, h = height)
 
 ap_summed = aperture_photometry(objimage/EXPTIME,aps,method='subpixel',subpixels=1)
 
+#%%
+ap_sigma
 #%%
 fig = plt.figure(figsize=(10,5))
 gs = gridspec.GridSpec(3,1)
@@ -709,5 +713,3 @@ ax.grid(ls=':')
 ax.legend()
 plt.show()
 
-#%%
-EXPTIME
