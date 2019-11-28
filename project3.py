@@ -314,5 +314,6 @@ table.add_column(Value, index = 1)
 
 table.write(Savepath/f'WISEA_spec.csv',format='ascii.csv',overwrite=True)
 
-
+#%%
+# And next, we will try to identify emmsion and obsorption line, the intensity, and redshift of them. 
 
