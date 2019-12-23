@@ -23,16 +23,15 @@ from ccdproc import trim_image
 fitspath = Path('/home/astro_02/AO2019-2/2019-10-24/BU')
 newfitspath = Path('/home/astro_02/AO2019-2/2019-10-24')
 os.chdir(fitspath)
-allfitsname = glob.glob('*.fits')
+allfitsname = glob.glob('*.fit')
 allfitspath = list(fitspath.glob('*.fit'))
 
 print(len(allfitspath),"Items are searched")
 
-
 #%%
 # Image Trimming 여부와 범위 설정, Default
 
-df = input("Default? Y/N(Otherwise) [880:1100,1,2048]")
+df = input("Default? Y/N(Otherwise) [880:1100,500,1600]")
 if df != "Y":
 
     print("이미지를 자르시겠습니까?")
@@ -54,17 +53,18 @@ if df != "Y":
         x2 = 2048
         y1 = 1
         y2 = 2048
+    print(f"[{x1}:{x2},{y1}:{y2}]")
         
 else:
     x1 = 880
     x2 = 1100
-    y1 = 1
-    y2 = 2048
+    y1 = 500
+    y2 = 1600
     print(f"[{x1}:{x2},{y1}:{y2}]")
-
 
 #%%
 # 이미지 trimming과 작업 파일 복사, 복사 후 chmod 777 *.fits을 터미널에 입력할 것
+
 
 """header test"""
 hdr = fits.getheader(allfitspath[0])
@@ -201,6 +201,7 @@ else:
     # Bias Image를 불러 Median Combine
     for i in range(len(biastab)):
         cc = CCDData.read(biastab[i]['FILE'], unit = u.adu)
+        print(cc.shape)
         images.append(cc)
     mbias = combine(images, method = 'median')
     
@@ -216,7 +217,6 @@ im = yfu.zimshow(axs,mbias)
 axs.set_xlabel("Bias", fontsize=12)
 
 mbias = CCDData.read(prepath/bias_fname, unit = u.adu)
-
 
 #%%
 # Master Dark이 Data를 Dictionary로 저장
