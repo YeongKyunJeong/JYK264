@@ -39,6 +39,8 @@ allfitspath = list(ppdpath.glob('*.fits'))
 allfitspath.sort()
 allfitsname.sort()
 
+SKYSBPATH=Path('/home/astro_02/AO2019-2/2019-10-24/SkysubImages')
+
 print(len(allfitspath),"Items are searched")
 #%%
 tb=Table.read(tablepath/'Headersumm.csv')
@@ -90,8 +92,8 @@ def disable_mplkeymaps():
 DISPAXIS = 2 # 1 = line = python_axis_1 // 2 = column = python_axis_0
 FONTSIZE = 12 # Change it on your computer if you wish.
 rcParams.update({'font.size': FONTSIZE})
-COMPIMAGE = os.path.join(ppdpath, 'Comp-master.fits') # Change directory if needed!
-OBJIMAGE  = os.path.join(ppdpath, 'HD4628-0009.fits')
+COMPIMAGE = ppdpath/'Comp-master.fits' # Change directory if needed!
+OBJIMAGE  = ppdpath/'NGC676-0001.fits'
 LINE_FITTER = LevMarLSQFitter()
 #%%
 # Parameters for IDENTIFY
@@ -125,6 +127,10 @@ SIGMA_APTRACE = 3
 ITERS_APTRACE = 5 
 # The fitting is done by SIGMA_APTRACE-sigma ITERS_APTRACE-iters clipped on the
 # residual of data. 
+#for NGC2639
+#ORDER_APTRACE = 9
+#SIGMA_APTRACE = 9
+#ITERS_APTRACE = 10
 
 #%%
 lamphdu = fits.open(COMPIMAGE)
@@ -162,7 +168,6 @@ print("setting done!")
 #%%
 #fig, axs = plt.subplots(1,1)
 #im = yfu.zimshow(axs,objimage)
-
 #%%
 # =============================================================================
 # Identify (1): plot for manual input
@@ -187,6 +192,7 @@ ax = fig.add_subplot(111)
 title_str = r'Peak ($A \geq {:.2f} A_\mathrm{{max}}$, $\Delta x \geq {:.0f}$)'
 # Plot original spectrum + found peak locations
 x_identify = np.arange(0, len(identify_1))
+
 ax.plot(x_identify, identify_1, lw=1)
 
 for i in peak_pix:
@@ -196,26 +202,35 @@ for i in peak_pix:
     ax.annotate(i[0], (i, 0.9),
                 xycoords = ('data', 'axes fraction'),
                 fontsize='xx-small', rotation=70)
+
+
+#ax.plot(x_identify[10:850], identify_1[10:850], lw=1)
+#
+#pixel_list = [804, 702, 681,
+#                           661, 635, 
+#                           618, 607,
+#                           592,
+#                           552, 531, 513,
+#                           504, 455, 432, 399, 383, 339,
+#                           127, 100, 36]
+
+    
+#for i in pixel_list:
+#    ax.plot((i, i), 
+#            (identify_1[i]+0.01*max_intens, identify_1[i]+0.05*max_intens),
+#            color='r', ls='-', lw=1)
+#    ax.annotate(i, (i, 0.9),
+#                xycoords = ('data', 'axes fraction'),
+#                fontsize = 15,
+#                rotation=70)
+    
 ax.grid(ls=':')
 ax.set_xlabel('Pixel number')
 ax.set_ylabel('Pixel value sum')
-ax.set_xlim(len(identify_1), 0) # to invert x-axis
+#ax.set_xlim(len(identify_1[10:850]), 0) # to invert x-axis
+ax.set_xlim(len(identify_1), 0)
 ax.set_title(title_str.format(MINAMP_PK, MINSEP_PK))
 plt.show()
-
-#%%
-#%% [880:1100,500:1600]
-pixel=[1303, 1201, 1180,
-                           1160, 1134, 
-                           1117, 1106,
-                           1091,
-                           1051, 1030, 1012,
-                           1003, 954, 931, 898, 882, 838,
-                           626, 599, 535]
-for i in pixel:
-    print(i-499)
-
-
 #%%
 ID_init = dict(pixel_init=[804, 702, 681,
                            661, 635, 
@@ -303,6 +318,7 @@ ax2.grid(ls=':')
 plt.suptitle(('First Identify (Chebyshev order {:d})\n'.format(ORDER_ID) 
               + r'RMSE = {:.2f} $\AA$'.format(fitRMS)))
 plt.show()
+
 #%%
 # =============================================================================
 # reidentify
@@ -490,7 +506,7 @@ plt.show()
 # =============================================================================
 ap_init = int(peak_pix[0])
 
-#for original sky region(HD207673,HD4628)
+#for original sky region(NGC676, HD207673, HD4628)
 ap_sky = np.array([ap_init-40, ap_init-20, ap_init+20, ap_init+40])
 #for NGC 2639
 #ap_sky = np.array([ap_init-55, ap_init-35, ap_init+20, ap_init+40])
@@ -542,6 +558,13 @@ ax.set_xlabel('Pixel number')
 ax.set_ylabel('Pixel value')
 plt.show()
 #%%
+#xx= np.arange(221)
+#
+#fig = plt.figure(figsize=(8, 5))
+#ax = fig.add_subplot(111)
+#ax.plot(xx, sky_fit, lw=1)
+#%%
+
 # =============================================================================
 # apall (3): aperture trace
 # =============================================================================
@@ -673,60 +696,102 @@ ax2.set_ylim(-.5, .5)
 ax2.legend()
 plt.show()
 #plt.savefig('aptrace.png', bbox_inches='tight')
-#%%
-# =============================================================================
-# apall(5): aperture sum
-# =============================================================================
 
-apsum_sigma_lower = 5 # See below
-apsum_sigma_upper = 5 
+#%%# =============================================================================
+# apall(5): aperture sum (NEW)
+# =============================================================================
+#for standard star(HD4628, HD61931, HD207673, +NGC676)
+apsum_sigma_lower = 5
+apsum_sigma_upper = 5
+#for object(extended source: NGC2639, WISEA)
+#apsum_sigma_lower = 3 # See below
+#apsum_sigma_upper = 3 
 # lower and upper limits of aperture to set from the center in gauss-sigma unit.
 ap_fwhm = np.median(aptrace_fwhm[~resid_mask])
 ap_sigma = ap_fwhm * gaussian_fwhm_to_sigma
+apheight = (apsum_sigma_lower + apsum_sigma_upper)*ap_sigma
 
 x_ap = np.arange(N_WAVELEN)
 y_ap = chebval(x_ap, coeff_aptrace_fin)
 ap_wavelen = fit2D_REID(x_ap, y_ap)
-ap_summed  = []
 ap_sky_offset = ap_sky - ap_init
-#original
-height =  (apsum_sigma_lower+apsum_sigma_upper)*ap_sigma
-#for ngc 2639
-#height = 40
-#for WISEA
-#height = 23
-aps=RectangularAperture([x_ap,y_ap],w = 1, h = height)
 
-ap_summed = aperture_photometry(objimage/EXPTIME,aps,method='subpixel',subpixels=15)
+ap_summed  = []
+data_skysub = []
+
+for i in range(N_WAVELEN):
+    cut_i = objimage[:, i].copy()
+    ap_sky_i = int(y_ap[i]) + ap_sky_offset
+   
+    x_sky = np.hstack( (np.arange(ap_sky_i[0], ap_sky_i[1]),
+                        np.arange(ap_sky_i[2], ap_sky_i[3])))
+    sky_val = np.hstack( (cut_i[ap_sky_i[0]:ap_sky_i[1]],
+                          cut_i[ap_sky_i[2]:ap_sky_i[3]]))
+    clip_mask = sigma_clip(sky_val, sigma=SIGMA_APSKY, maxiters=ITERS_APSKY).mask
+   
+    coeff = chebfit(x_sky[~clip_mask],
+                    sky_val[~clip_mask],
+                    deg=ORDER_APSKY)
+
+    data_skysub.append(cut_i - chebval(np.arange(cut_i.shape[0]), coeff))
+
+data_skysub = np.array(data_skysub).T
+hdr = objhdu[0].header
+hdr.add_history(f"Sky subtracted using sky offset = {ap_sky_offset}, "
+                + f"{SIGMA_APSKY}-sigma {ITERS_APSKY}-iter clipping "
+                + f"to fit order {ORDER_APSKY} Chebyshev")
+_ = fits.PrimaryHDU(data=data_skysub, header=hdr)
+_.data = _.data.astype('float32')
+_.writeto(SKYSBPATH/(OBJIMAGE.stem+".skysub.fits"), overwrite=True)
+
+pos = np.array([x_ap, y_ap]).T
+aps = RectangularAperture(positions=pos, w=1, h=apheight, theta=0)
+phot = aperture_photometry(data_skysub, aps, method='subpixel', subpixels=30)
+ap_summed = phot['aperture_sum'] / EXPTIME
+
+fig, axs = plt.subplots(2, 1, figsize=(10, 6), sharex=False, sharey=False, gridspec_kw=None)
+
+axs[0].imshow(objimage, vmin=0, vmax=4900, origin='lower')
+axs[1].imshow(data_skysub, vmin=0, vmax=200, origin='lower')
+axs[1].plot(pos[:,0], pos[:,1], 'r-')
+axs[0].set(title="Before sky subtraction")
+axs[1].set(title="Sky subtracted")
+
+for ax in [axs[0], axs[1]]:
+    ax.plot(x_ap, y_ap+apsum_sigma_upper*ap_sigma, 'r-', lw=1)
+    ax.plot(x_ap, y_ap-apsum_sigma_lower*ap_sigma, 'r-', lw=1)
+#    ax.set(ylim=(400, 700))
+    for offset in ap_sky_offset:
+        ax.plot(x_ap, y_ap+offset, 'y-', lw=1)
+    
+plt.tight_layout()
+plt.show()
+
+
+
 #%%
+
 fig = plt.figure(figsize=(10,5))
 gs = gridspec.GridSpec(3,1)
 ax = plt.subplot(gs[0:3])
+
 #plt.setp(ax.get_xticklabels(), visible=False)
-
-title_str = '{:s}\nobjext = {:s}, EXPTIME = {:.1f} s'
+title_str = ('{:s}\nobject = {:s}, EXPTIME = {:.1f} s')
 label_str = r'aperture width $\approx$ {:.1f} pix'
-plt.suptitle(title_str.format(os.path.split(OBJIMAGE)[-1],
-                            OBJNAME, EXPTIME))
-ax.plot(ap_wavelen,(ap_summed['aperture_sum']),lw=1,
-#ax.plot(ap_wavelen[500:1500],ap_summed[500:1500], lw=1,
-#ax.plot(xxx,ap_summed, lw=1,
-#        alpha=0.5,
-
-        label=label_str.format(height))
-        
+plt.suptitle(title_str.format(OBJIMAGE.name,
+                              OBJNAME, EXPTIME))
+ax.plot(ap_wavelen, ap_summed, lw = 1,
+         label=label_str.format(apheight))
 ax.set_ylabel('Instrument Intensity\n(apsum/EXPTIME)')
-"""
-ax.errorbar(ap_wavelen[500:1800],
-            np.array(ap_summed['aperture_sum'][500:1800]),
-            yerr=np.sqrt(ap_summed['aperture_sum'][500:1800]/GAIN)
-#
-            ,fmt='.')
-"""            
 ax.set_xlabel(r'$\lambda$ ($\AA$)')
-ax.grid(ls=':')
+
 ax.legend()
 plt.show()
+
+
+
+
+
 #%%
 input("Value를 저장하세요")
 #%%
@@ -751,7 +816,7 @@ Value = Column(data = sds_val, name='Value')
 table.add_column(wave_length, index = 0)
 table.add_column(Value, index = 1)
 
-table.write(Savepath/'HD4628_09.csv',format='ascii.csv',overwrite=True)
+table.write(Savepath/'NGC676_01.csv',format='ascii.csv',overwrite=True)
 
 
 #%%
@@ -760,60 +825,67 @@ table.write(Savepath/'HD4628_09.csv',format='ascii.csv',overwrite=True)
 
 
 
-    #%%
+#%%
 Savepath=Path('/home/astro_02/AO2019-2/2019-10-24/Specdata')
-    
-for L in range(9):
-    DISPAXIS = 2 # 1 = line = python_axis_1 // 2 = column = python_axis_0
-    FONTSIZE = 12 # Change it on your computer if you wish.
-    rcParams.update({'font.size': FONTSIZE})
-    COMPIMAGE = os.path.join(ppdpath, 'Comp-master.fits') # Change directory if needed!
-    OBJIMAGE  = os.path.join(ppdpath, f'HD61931-000{L+1}.fits')
-    LINE_FITTER = LevMarLSQFitter()
-    
-    # Parameters for IDENTIFY
-    FITTING_MODEL_ID = 'Chebyshev'
-    ORDER_ID = 4 
-    NSUM_ID = 10
-    FWHM_ID = 4 # rough guess of FWHM of lines in IDENTIFY (pixels)
-    
-    # Parameters for REIDENTIFY
-    FITTING_MODEL_REID = 'Chebyshev' # 2-D fitting function
-    ORDER_SPATIAL_REID = 6
-    ORDER_WAVELEN_REID = 6
-    STEP_REID = 15  # Reidentification step size in pixels (spatial direction)
-    NSUM_REID = 10
-    TOL_REID = 5 # tolerence to lose a line in pixels
-    
-    # Parameters for APALL (sky fitting and aperture extract after sky subtraction)
-    ## parameters for finding aperture
-    NSUM_AP = 10
-    FWHM_AP = 10
-    STEP_AP = 10  # Recentering step size in pixels (dispersion direction)
-    ## parameters for sky fitting
-    FITTING_MODEL_APSKY = 'Chebyshev'
-    ORDER_APSKY = 3
-    SIGMA_APSKY = 3
-    ITERS_APSKY = 5
-    ## parameters for aperture tracing
-    FITTING_MODEL_APTRACE = 'Chebyshev'
-    ORDER_APTRACE = 3
-    SIGMA_APTRACE = 3
-    ITERS_APTRACE = 5 
-    # The fitting is done by SIGMA_APTRACE-sigma ITERS_APTRACE-iters clipped on the
-    # residual of data. 
-    
-    
-    lamphdu = fits.open(COMPIMAGE)
+DISPAXIS = 2 # 1 = line = python_axis_1 // 2 = column = python_axis_0
+FONTSIZE = 12 # Change it on your computer if you wish.
+rcParams.update({'font.size': FONTSIZE})
+COMPIMAGE = ppdpath/'Comp-master.fits' # Change directory if needed!
+LINE_FITTER = LevMarLSQFitter()
+
+# Parameters for IDENTIFY
+FITTING_MODEL_ID = 'Chebyshev'
+ORDER_ID = 4 
+NSUM_ID = 10
+FWHM_ID = 4 # rough guess of FWHM of lines in IDENTIFY (pixels)
+
+# Parameters for REIDENTIFY
+FITTING_MODEL_REID = 'Chebyshev' # 2-D fitting function
+ORDER_SPATIAL_REID = 6
+ORDER_WAVELEN_REID = 6
+STEP_REID = 15  # Reidentification step size in pixels (spatial direction)
+NSUM_REID = 10
+TOL_REID = 5 # tolerence to lose a line in pixels
+
+# Parameters for APALL (sky fitting and aperture extract after sky subtraction)
+## parameters for finding aperture
+NSUM_AP = 10
+FWHM_AP = 10
+STEP_AP = 10  # Recentering step size in pixels (dispersion direction)
+## parameters for sky fitting
+FITTING_MODEL_APSKY = 'Chebyshev'
+ORDER_APSKY = 3
+SIGMA_APSKY = 3
+ITERS_APSKY = 5
+## parameters for aperture tracing
+FITTING_MODEL_APTRACE = 'Chebyshev'
+
+
+ORDER_APTRACE = 3
+SIGMA_APTRACE = 3
+ITERS_APTRACE = 5
+
+#for NGC2639
+#ORDER_APTRACE = 9
+#SIGMA_APTRACE = 9
+#ITERS_APTRACE = 10
+# The fitting is done by SIGMA_APTRACE-sigma ITERS_APTRACE-iters clipped on the
+# residual of data
+#%%
+#for L in range(9):
+
+for L in range(4):
+
+#"""Change object here"""
+
+    OBJIMAGE  = ppdpath/ f'WISEA-000{L+1}.fits'
+  
     objhdu = fits.open(OBJIMAGE)
-    lampimage = lamphdu[0].data
+
     objimage  = objhdu[0].data
-    
-    if lampimage.shape != objimage.shape:
-        raise ValueError('lamp and obj images should have same sizes!')
-    
+
     if DISPAXIS == 2:
-        lampimage = lampimage.T
+
         objimage = objimage.T
     elif DISPAXIS != 1:
         raise ValueError('DISPAXIS must be 1 or 2 (it is now {:d})'.format(DISPAXIS))
@@ -823,7 +895,7 @@ for L in range(9):
     GAIN = objhdu[0].header['EGAIN']
     # Now python axis 0 (Y-direction) is the spatial axis 
     # and 1 (X-direciton) is the wavelength (dispersion) axis.
-    N_SPATIAL, N_WAVELEN = np.shape(lampimage)
+    N_SPATIAL, N_WAVELEN = np.shape(objimage)
     
     N_REID = N_SPATIAL//STEP_REID # No. of reidentification
     N_AP = N_WAVELEN//STEP_AP # No. of aperture finding
@@ -880,11 +952,11 @@ for L in range(9):
     ap_init = int(peak_pix[0])
     
     #for original sky region(HD207673,HD4628)
-    ap_sky = np.array([ap_init-40, ap_init-20, ap_init+20, ap_init+40])
+    #ap_sky = np.array([ap_init-40, ap_init-20, ap_init+20, ap_init+40])
     #for NGC 2639
     #ap_sky = np.array([ap_init-55, ap_init-35, ap_init+20, ap_init+40])
     #for WISEA
-    #ap_sky = np.array([ap_init-40, ap_init-20, ap_init+35, ap_init+55])
+    ap_sky = np.array([ap_init-40, ap_init-20, ap_init+35, ap_init+55])
     
     # Regions to use as sky background. xl1 - 1, xu1, xl2 - 1, xu2. (0-indexing)
     #   Sky region should also move with aperture center!
@@ -1074,65 +1146,100 @@ for L in range(9):
     # =============================================================================
     # apall(5): aperture sum
     # =============================================================================
-    
-    apsum_sigma_lower = 5 # See below
-    apsum_sigma_upper = 5 
+#for original
+#    apsum_sigma_lower = 5 # See below
+#    apsum_sigma_upper = 5 
+    #
+#for WISEA,NGC2639
+    apsum_sigma_lower = 3 # See below
+    apsum_sigma_upper = 3 
+
     # lower and upper limits of aperture to set from the center in gauss-sigma unit.
     ap_fwhm = np.median(aptrace_fwhm[~resid_mask])
     ap_sigma = ap_fwhm * gaussian_fwhm_to_sigma
+    apheight = (apsum_sigma_lower + apsum_sigma_upper)*ap_sigma
     
     x_ap = np.arange(N_WAVELEN)
     y_ap = chebval(x_ap, coeff_aptrace_fin)
     ap_wavelen = fit2D_REID(x_ap, y_ap)
-    ap_summed  = []
     ap_sky_offset = ap_sky - ap_init
-    #original
-    height =  (apsum_sigma_lower+apsum_sigma_upper)*ap_sigma
-    #for ngc 2639
-    #height = 40
-    #for WISEA
-    #height = 23
-    aps=RectangularAperture([x_ap,y_ap],w = 1, h = height)
     
-    ap_summed = aperture_photometry(objimage/EXPTIME,aps,method='subpixel',subpixels=15)
+    ap_summed  = []
+    data_skysub = []
     
+    for i in range(N_WAVELEN):
+        cut_i = objimage[:, i].copy()
+        ap_sky_i = int(y_ap[i]) + ap_sky_offset
+       
+        x_sky = np.hstack( (np.arange(ap_sky_i[0], ap_sky_i[1]),
+                            np.arange(ap_sky_i[2], ap_sky_i[3])))
+        sky_val = np.hstack( (cut_i[ap_sky_i[0]:ap_sky_i[1]],
+                              cut_i[ap_sky_i[2]:ap_sky_i[3]]))
+        clip_mask = sigma_clip(sky_val, sigma=SIGMA_APSKY, maxiters=ITERS_APSKY).mask
+       
+        coeff = chebfit(x_sky[~clip_mask],
+                        sky_val[~clip_mask],
+                        deg=ORDER_APSKY)
     
+        data_skysub.append(cut_i - chebval(np.arange(cut_i.shape[0]), coeff))
+    
+    data_skysub = np.array(data_skysub).T
+    hdr = objhdu[0].header
+    hdr.add_history(f"Sky subtracted using sky offset = {ap_sky_offset}, "
+                    + f"{SIGMA_APSKY}-sigma {ITERS_APSKY}-iter clipping "
+                    + f"to fit order {ORDER_APSKY} Chebyshev")
+    _ = fits.PrimaryHDU(data=data_skysub, header=hdr)
+    _.data = _.data.astype('float32')
+    _.writeto(SKYSBPATH/(OBJIMAGE.stem+".skysub.fits"), overwrite=True)
+    
+    pos = np.array([x_ap, y_ap]).T
+    aps = RectangularAperture(positions=pos, w=1, h=apheight, theta=0)
+    phot = aperture_photometry(data_skysub, aps, method='subpixel', subpixels=30)
+    ap_summed = phot['aperture_sum'] / EXPTIME
+
     if L == 0:
+        
+        fig, axs = plt.subplots(2, 1, figsize=(10, 6), sharex=False, sharey=False, gridspec_kw=None)
+        
+        axs[0].imshow(objimage, vmin=0, vmax=200, origin='lower')
+        axs[1].imshow(data_skysub, vmin=0, vmax=200, origin='lower')
+        axs[1].plot(pos[:,0], pos[:,1], 'r-')
+        axs[0].set(title="Before sky subtraction")
+        axs[1].set(title="Sky subtracted")
+        
+        for ax in [axs[0], axs[1]]:
+            ax.plot(x_ap, y_ap+apsum_sigma_upper*ap_sigma, 'r-', lw=1)
+            ax.plot(x_ap, y_ap-apsum_sigma_lower*ap_sigma, 'r-', lw=1)
+        #    ax.set(ylim=(400, 700))
+            for offset in ap_sky_offset:
+                ax.plot(x_ap, y_ap+offset, 'y-', lw=1)
             
+        plt.tight_layout()
+        plt.show()   
+        
+        
         fig = plt.figure(figsize=(10,5))
         gs = gridspec.GridSpec(3,1)
         ax = plt.subplot(gs[0:3])
+        
         #plt.setp(ax.get_xticklabels(), visible=False)
-        
-        title_str = '{:s}\nobjext = {:s}, EXPTIME = {:.1f} s'
+        title_str = ('{:s}\nobject = {:s}, EXPTIME = {:.1f} s')
         label_str = r'aperture width $\approx$ {:.1f} pix'
-        plt.suptitle(title_str.format(os.path.split(OBJIMAGE)[-1],
-                                    OBJNAME, EXPTIME))
-        ax.plot(ap_wavelen,(ap_summed['aperture_sum']),lw=1,
-        #ax.plot(ap_wavelen[500:1500],ap_summed[500:1500], lw=1,
-        #ax.plot(xxx,ap_summed, lw=1,
-        #        alpha=0.5,
-        
-                label=label_str.format(height))
-                
+        plt.suptitle(title_str.format(OBJIMAGE.name,
+                                      OBJNAME, EXPTIME))
+        ax.plot(ap_wavelen, ap_summed, lw = 1,
+                 label=label_str.format(apheight))
         ax.set_ylabel('Instrument Intensity\n(apsum/EXPTIME)')
-        """
-        ax.errorbar(ap_wavelen[500:1800],
-                    np.array(ap_summed['aperture_sum'][500:1800]),
-                    yerr=np.sqrt(ap_summed['aperture_sum'][500:1800]/GAIN)
-        #
-                    ,fmt='.')
-        """            
         ax.set_xlabel(r'$\lambda$ ($\AA$)')
-        ax.grid(ls=':')
+        
         ax.legend()
         plt.show()
 
 
-    
+        
     sds_wvlt = ap_wavelen
     sds_wvlt.sort()
-    sds_val = np.array(ap_summed['aperture_sum']   )
+    sds_val = np.array(ap_summed)
     sds_val = np.flip(sds_val)
 
     
@@ -1144,6 +1251,7 @@ for L in range(9):
     
     table.add_column(wave_length, index = 0)
     table.add_column(Value, index = 1)
+#"""Change object here"""
     
-    table.write(Savepath/f'HD61931_0{L+1}.csv',format='ascii.csv',overwrite=True)
+    table.write(Savepath/f'WISEA_raw_0{L+1}.csv',format='ascii.csv',overwrite=True)
 
